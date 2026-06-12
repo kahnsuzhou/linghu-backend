@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linghu.mapper.ExternalBatchMapper">
+
+    <resultMap id="BaseResultMap" type="com.linghu.entity.ExternalBatch">
+        <id     column="id"            property="id"/>
+        <result column="batch_no"      property="batchNo"/>
+        <result column="brand_id"      property="brandId"/>
+        <result column="file_name"     property="fileName"/>
+        <result column="total_count"   property="totalCount"/>
+        <result column="success_count" property="successCount"/>
+        <result column="failed_count"  property="failedCount"/>
+        <result column="status"        property="status"/>
+        <result column="operator_id"   property="operatorId"/>
+        <result column="create_time"   property="createTime"/>
+        <result column="deleted"       property="deleted"/>
+    </resultMap>
+
+    <!-- 按品牌ID分页查询批次，按创建时间倒序 -->
+    <select id="selectByBrandId" resultMap="BaseResultMap">
+        SELECT id, batch_no, brand_id, file_name, total_count, success_count, failed_count,
+               status, operator_id, create_time, deleted
+        FROM external_batch
+        WHERE brand_id = #{brandId}
+          AND deleted = 0
+        ORDER BY create_time DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+</mapper>

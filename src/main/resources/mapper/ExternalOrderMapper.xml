@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.linghu.mapper.ExternalOrderMapper">
+
+    <resultMap id="BaseResultMap" type="com.linghu.entity.ExternalOrder">
+        <id     column="id"               property="id"/>
+        <result column="batch_id"         property="batchId"/>
+        <result column="brand_id"         property="brandId"/>
+        <result column="warehouse_id"     property="warehouseId"/>
+        <result column="work_order_id"    property="workOrderId"/>
+        <result column="external_order_no" property="externalOrderNo"/>
+        <result column="channel"          property="channel"/>
+        <result column="product_name"     property="productName"/>
+        <result column="sku_code"         property="skuCode"/>
+        <result column="quantity"         property="quantity"/>
+        <result column="receiver_name"    property="receiverName"/>
+        <result column="receiver_phone"   property="receiverPhone"/>
+        <result column="receiver_address" property="receiverAddress"/>
+        <result column="status"           property="status"/>
+        <result column="logistics_company" property="logisticsCompany"/>
+        <result column="logistics_no"     property="logisticsNo"/>
+        <result column="ship_time"        property="shipTime"/>
+        <result column="exception_reason" property="exceptionReason"/>
+        <result column="fail_reason"      property="failReason"/>
+        <result column="create_time"      property="createTime"/>
+        <result column="update_time"      property="updateTime"/>
+        <result column="deleted"          property="deleted"/>
+    </resultMap>
+
+    <!-- 按品牌ID和状态分页查询外单，status为null时查全部 -->
+    <select id="selectByBrandIdAndStatus" resultMap="BaseResultMap">
+        SELECT id, batch_id, brand_id, warehouse_id, work_order_id, external_order_no,
+               channel, product_name, sku_code, quantity, receiver_name, receiver_phone,
+               receiver_address, status, logistics_company, logistics_no, ship_time,
+               exception_reason, fail_reason, create_time, update_time, deleted
+        FROM external_order
+        WHERE brand_id = #{brandId}
+          AND deleted = 0
+          <if test="status != null">
+              AND status = #{status}
+          </if>
+        ORDER BY create_time DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <!-- 按仓库ID和状态查询外单，status为null时查全部 -->
+    <select id="selectByWarehouseIdAndStatus" resultMap="BaseResultMap">
+        SELECT id, batch_id, brand_id, warehouse_id, work_order_id, external_order_no,
+               channel, product_name, sku_code, quantity, receiver_name, receiver_phone,
+               receiver_address, status, logistics_company, logistics_no, ship_time,
+               exception_reason, fail_reason, create_time, update_time, deleted
+        FROM external_order
+        WHERE warehouse_id = #{warehouseId}
+          AND deleted = 0
+          <if test="status != null">
+              AND status = #{status}
+          </if>
+        ORDER BY create_time ASC
+    </select>
+
+</mapper>
