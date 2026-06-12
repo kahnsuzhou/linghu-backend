@@ -117,27 +117,33 @@ public class AuthController {
         String code = (String) body.get("code");
         if (code == null || code.isBlank()) throw new BusinessException("缺少 code 参数");
 
-        // 1. 用 code 换 openid
-        String url = String.format(
-            "https://api.weixin.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
-            wxAppId, wxSecret, code);
+        // 开发测试模式：code 以 "dev_" 开头时跳过微信验证，直接用 code 作为 openid
         String openid;
-        try {
-            RestTemplate rest = new RestTemplate();
-            @SuppressWarnings("unchecked")
-            Map<String, Object> wxResp = rest.getForObject(url, Map.class);
-            if (wxResp == null || wxResp.containsKey("errcode")) {
-                int errcode = wxResp != null ? (int) wxResp.getOrDefault("errcode", -1) : -1;
-                String errmsg = wxResp != null ? (String) wxResp.getOrDefault("errmsg", "unknown") : "unknown";
-                log.warn("微信 jscode2session 失败: errcode={}, errmsg={}", errcode, errmsg);
-                throw new BusinessException("微信登录失败：" + errmsg);
+        if (code.startsWith("dev_") || code.startsWith("test_")) {
+            openid = "mock_openid_" + code.substring(4);
+            log.info("[DEV] 使用测试 openid: {}", openid);
+        } else {
+            // 1. 用 code 换 openid
+            String url = String.format(
+                "https://api.weixin.qq.com/sns/jscode2session?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
+                wxAppId, wxSecret, code);
+            try {
+                RestTemplate rest = new RestTemplate();
+                @SuppressWarnings("unchecked")
+                Map<String, Object> wxResp = rest.getForObject(url, Map.class);
+                if (wxResp == null || wxResp.containsKey("errcode")) {
+                    int errcode = wxResp != null ? (int) wxResp.getOrDefault("errcode", -1) : -1;
+                    String errmsg = wxResp != null ? (String) wxResp.getOrDefault("errmsg", "unknown") : "unknown";
+                    log.warn("微信 jscode2session 失败: errcode={}, errmsg={}", errcode, errmsg);
+                    throw new BusinessException("微信登录失败：" + errmsg);
+                }
+                openid = (String) wxResp.get("openid");
+            } catch (BusinessException e) {
+                throw e;
+            } catch (Exception e) {
+                log.error("调用微信接口异常", e);
+                throw new BusinessException("微信登录接口异常，请稍后再试");
             }
-            openid = (String) wxResp.get("openid");
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("调用微信接口异常", e);
-            throw new BusinessException("微信登录接口异常，请稍后再试");
         }
 
         // 2. 按 openid 查找已有用户（openid 存在 username 字段前缀 wx_ 或 phone 字段）
