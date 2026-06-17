@@ -85,8 +85,13 @@ alipay:
   notify-url: https://YOUR_DOMAIN/api/payment/alipay/notify
   return-url: https://YOUR_DOMAIN/#/payment/result
 
-# 微信支付配置（填入真实商户信息后自动启用）
+# 微信小程序配置
 wechat:
+  miniapp:
+    appid: wxb6997bebf3aa9e11
+    secret: 5f3429630d9c947e403e235e79cbb942
+
+  # 微信支付配置（填入真实商户信息后自动启用）
   pay:
     enabled: false                         # 设为 true 并填入真实配置后启用
     app-id: YOUR_WECHAT_APPID
