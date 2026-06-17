@@ -13,6 +13,7 @@ import com.linghu.service.WebSocketService;
 import com.linghu.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -42,6 +43,7 @@ public class WalletController {
     private final UserMapper userMapper;
     private final WebSocketService webSocketService;
     private final ObjectMapper objectMapper;
+    private final PasswordEncoder passwordEncoder;
 
     // ==================== 公共接口 ====================
 
@@ -58,7 +60,123 @@ public class WalletController {
         result.put("balance", wallet.getBalance());
         result.put("frozen", wallet.getFrozen());
         result.put("available", wallet.getBalance().subtract(wallet.getFrozen()));
+        result.put("hasPayPassword", wallet.getPayPassword() != null && !wallet.getPayPassword().isBlank());
         return R.ok(result);
+    }
+
+    /**
+     * 设置/修改支付密码
+     * POST /api/wallet/set-pay-password
+     * body: { "password": "123456" }  (6位数字)
+     */
+    @PostMapping("/set-pay-password")
+    @RequireRole(0)
+    public R<Void> setPayPassword(@RequestBody Map<String, Object> body) {
+        Long userId = SecurityUtil.getCurrentUserId();
+        String password = (String) body.get("password");
+        if (password == null || !password.matches("\\d{6}")) {
+            throw new BusinessException("支付密码必须是6位数字");
+        }
+        Wallet wallet = getOrCreateWallet(userId);
+        wallet.setPayPassword(passwordEncoder.encode(password));
+        walletMapper.updateById(wallet);
+        return R.ok("支付密码设置成功", null);
+    }
+
+    /**
+     * 钱包余额支付（带支付密码校验）
+     * POST /api/wallet/pay-with-password
+     * body: { "orderId": 123, "password": "123456" }
+     */
+    @PostMapping("/pay-with-password")
+    @RequireRole(0)
+    @Transactional(rollbackFor = Exception.class)
+    public R<Map<String, Object>> walletPayWithPassword(@RequestBody Map<String, Object> body) throws JsonProcessingException {
+        Long userId = SecurityUtil.getCurrentUserId();
+        Long orderId = parseLong(body.get("orderId"));
+        String password = (String) body.get("password");
+        if (orderId == null) throw new BusinessException("订单ID不能为空");
+        if (password == null || password.isBlank()) throw new BusinessException("请输入支付密码");
+
+        Order order = orderMapper.selectById(orderId);
+        if (order == null || !order.getUserId().equals(userId)) throw new BusinessException("订单不存在");
+        if (!"PENDING_PAY".equals(order.getStatus())) throw new BusinessException("订单状态不正确");
+
+        Wallet wallet = getOrCreateWallet(userId);
+
+        // 校验支付密码
+        if (wallet.getPayPassword() == null || wallet.getPayPassword().isBlank()) {
+            throw new BusinessException("请先设置支付密码");
+        }
+        if (!passwordEncoder.matches(password, wallet.getPayPassword())) {
+            throw new BusinessException("支付密码错误");
+        }
+
+        BigDecimal totalAmount = order.getTotalAmount();
+        if (wallet.getBalance().compareTo(totalAmount) < 0) {
+            throw new BusinessException(
+                String.format("余额不足，订单金额：¥%.2f，当前余额：¥%.2f", totalAmount, wallet.getBalance()));
+        }
+
+        // 扣减余额
+        int updated = walletMapper.updateBalance(userId, totalAmount.negate());
+        if (updated == 0) throw new BusinessException("余额不足，支付失败");
+
+        BigDecimal balanceAfter = walletMapper.selectOne(
+            new LambdaQueryWrapper<Wallet>().eq(Wallet::getUserId, userId)).getBalance();
+        recordTransaction(userId, "PAY", totalAmount.negate(), balanceAfter, "支付订单 " + order.getOrderSn(), orderId);
+
+        // 更新订单状态
+        order.setStatus("PENDING_DELIVERY");
+        order.setPaidAt(LocalDateTime.now());
+        if ("pickup".equals(order.getDeliveryMode())) {
+            String pickUpCode = String.format("%06d", (int)(Math.random() * 1000000));
+            order.setPickUpCode(pickUpCode);
+        }
+        orderMapper.updateById(order);
+
+        // 按仓库分组创建拣货工单
+        List<OrderItem> items = orderItemMapper.selectList(
+            new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, orderId));
+        Map<Long, List<OrderItem>> warehouseItems = new HashMap<>();
+        for (OrderItem item : items) {
+            warehouseItems.computeIfAbsent(item.getWarehouseId(), k -> new ArrayList<>()).add(item);
+        }
+        for (Map.Entry<Long, List<OrderItem>> entry : warehouseItems.entrySet()) {
+            Long warehouseId = entry.getKey();
+            List<OrderItem> wItems = entry.getValue();
+            List<Map<String, Object>> workItems = new ArrayList<>();
+            for (OrderItem item : wItems) {
+                Product product = productMapper.selectById(item.getProductId());
+                Map<String, Object> wi = new HashMap<>();
+                wi.put("productId", item.getProductId());
+                wi.put("productName", product != null ? product.getName() : "未知商品");
+                wi.put("barcode", product != null ? product.getBarcode() : "");
+                wi.put("planQuantity", item.getQuantity());
+                wi.put("scannedQuantity", 0);
+                workItems.add(wi);
+            }
+            WorkOrder workOrder = new WorkOrder();
+            workOrder.setType(2);
+            workOrder.setWarehouseId(warehouseId);
+            workOrder.setBrandId(wItems.get(0).getBrandId());
+            workOrder.setOrderNo(order.getOrderSn());
+            workOrder.setDeliveryMode(order.getDeliveryMode());
+            workOrder.setStatus("PENDING");
+            workOrder.setItems(objectMapper.writeValueAsString(workItems));
+            workOrder.setDeleted(0);
+            workOrderMapper.insert(workOrder);
+            for (OrderItem item : wItems) {
+                item.setWorkOrderId(workOrder.getId());
+                orderItemMapper.updateById(item);
+            }
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("success", true);
+        result.put("balanceAfter", balanceAfter);
+        log.info("钱包支付成功: userId={}, orderId={}, amount={}", userId, orderId, totalAmount);
+        return R.ok("支付成功", result);
     }
 
     /**

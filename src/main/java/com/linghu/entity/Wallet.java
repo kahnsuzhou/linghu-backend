@@ -28,6 +28,11 @@ public class Wallet {
      */
     private BigDecimal frozen;
 
+    /**
+     * 支付密码（BCrypt加密，null表示未设置）
+     */
+    private String payPassword;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
