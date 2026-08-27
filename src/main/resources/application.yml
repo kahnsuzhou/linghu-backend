@@ -82,8 +82,8 @@ alipay:
   private-key: YOUR_RSA2_PRIVATE_KEY
   public-key: YOUR_ALIPAY_PUBLIC_KEY
   gateway: https://openapi.alipay.com/gateway.do
-  notify-url: https://YOUR_DOMAIN/api/payment/alipay/notify
-  return-url: https://YOUR_DOMAIN/#/payment/result
+  notify-url: https://www.aifox.club/api/payment/alipay/notify
+  return-url: https://www.aifox.club/#/payment/result
 
 # 微信小程序配置
 wechat:
@@ -99,10 +99,18 @@ wechat:
     api-v3-key: YOUR_API_V3_KEY
     cert-serial-no: YOUR_CERT_SERIAL_NO
     private-key-path: classpath:wechat/apiclient_key.pem
-    notify-url: https://YOUR_DOMAIN/api/payment/wechat/notify
+    notify-url: https://www.aifox.club/api/payment/wechat/notify
 
 # 日志配置
 logging:
   level:
     com.linghu: debug
     org.springframework.security: info
+
+# 支付FM配置
+payment:
+  fm:
+    api-url: https://api-57pbm1g2o4qo.zhifu.fm.it88168.com/api
+    merchant-id: 686273386053517312
+    merchant-key: 6020c4d87ed300d209d9faf9c624fb13
+    notify-url: https://www.aifox.club/api/payment/fm/notify

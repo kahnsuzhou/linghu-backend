@@ -40,6 +40,7 @@ public class PaymentOrder {
 
     /** H5 支付跳转链接（充值时由第三方返回） */
     private String payUrl;
+    private Long refId;
 
     /** 原始回调报文 */
     private String callbackRaw;

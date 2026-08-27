@@ -17,6 +17,7 @@ import com.linghu.entity.UserPaymentAccount;
 import com.linghu.mapper.PaymentOrderMapper;
 import com.linghu.mapper.UserPaymentAccountMapper;
 import com.linghu.mapper.WalletMapper;
+import com.linghu.service.PaymentFMService;
 import com.linghu.util.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +54,8 @@ public class PaymentController {
     private final WalletMapper walletMapper;
     private final WalletController walletController;
     private final ObjectMapper objectMapper;
+    @Autowired
+    private PaymentFMService paymentFMService;
 
     @Autowired(required = false)
     private AlipayClient alipayClient;
@@ -96,6 +99,38 @@ public class PaymentController {
             throw new BusinessException("单次充值不超过10000元");
         }
         if (channel == null) channel = "ALIPAY";
+
+        // ── 优先使用支付FM ──
+        if (paymentFMService != null) {
+            try {
+                String orderNo = generateOrderNo("R");
+                String subject = "灵狐钱包充值 ¥" + amount.toPlainString();
+                System.out.println("=== 调用 createOrder，金额: " + amount.setScale(2, BigDecimal.ROUND_HALF_UP).toPlainString());
+                String payUrl = paymentFMService.createOrder(
+                        orderNo,
+                        amount.setScale(2, BigDecimal.ROUND_HALF_UP).toPlainString(),
+                        subject,
+                        "https://www.aifox.club/api/payment/fm/notify"
+                );
+                PaymentOrder po = new PaymentOrder();
+                po.setUserId(userId);
+                po.setOrderNo(orderNo);
+                po.setChannel("PAYMENT_FM");
+                po.setType("RECHARGE");
+                po.setAmount(amount);
+                po.setStatus("PENDING");
+                po.setPayUrl(payUrl);
+                paymentOrderMapper.insert(po);
+                Map<String, Object> result = new HashMap<>();
+                result.put("orderNo", orderNo);
+                result.put("payUrl", payUrl);
+                result.put("channel", "PAYMENT_FM");
+                result.put("mode", "H5");
+                return R.ok("支付链接已生成，请跳转完成支付", result);
+            } catch (Exception e) {
+                log.error("支付FM创建订单失败，回退到默认支付", e);
+            }
+        }
 
         // ── 支付宝真实充值 ──
         if ("ALIPAY".equals(channel) && alipayEnabled && alipayClient != null) {

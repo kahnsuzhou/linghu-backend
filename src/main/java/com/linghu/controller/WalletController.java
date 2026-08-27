@@ -315,9 +315,15 @@ public class WalletController {
         BigDecimal totalAmount = order.getTotalAmount();
         Wallet wallet = getOrCreateWallet(userId);
         if (wallet.getBalance().compareTo(totalAmount) < 0) {
-            throw new BusinessException(
-                    String.format("余额不足，订单金额：¥%.2f，当前余额：¥%.2f，请先充值",
-                            totalAmount, wallet.getBalance()));
+            // 余额不足时，返回充值链接
+            BigDecimal needAmount = totalAmount.subtract(wallet.getBalance());
+            Map<String, Object> result = new HashMap<>();
+            result.put("rechargeNeeded", true);
+            result.put("needAmount", needAmount);
+            result.put("orderId", orderId);
+            result.put("message", "余额不足，需要充值 ¥" + needAmount.toPlainString() + " 完成支付");
+            result.put("payUrl", "https://www.aifox.club/api/payment/recharge?amount=" + needAmount + "&orderId=" + orderId);
+            return R.ok("请先充值完成支付", result);
         }
 
         // ① 扣减余额
